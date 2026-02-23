@@ -463,7 +463,7 @@ export default function UploadPage() {
         <CardContent className="py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Status Backend:</span>
+              <span className="text-sm font-medium">Status:</span>
               {backendStatus === 'checking' && (
                 <Badge variant="secondary" className="bg-yellow-100 text-yellow-700">
                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
@@ -479,13 +479,11 @@ export default function UploadPage() {
               {backendStatus === 'offline' && (
                 <Badge variant="destructive" className="bg-red-100 text-red-700">
                   <AlertCircle className="w-3 h-3 mr-1" />
-                  Offline - Pastikan backend running di port 8000
+                  Offline | Tidak dapat menambahkan data
                 </Badge>
               )}
             </div>
-            <span className="text-xs text-gray-500">
-              {process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}
-            </span>
+
           </div>
         </CardContent>
       </Card>
