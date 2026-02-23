@@ -421,7 +421,7 @@ export default function UploadPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Table className="w-4 h-4" /> Total Retailer
+              <Table className="w-4 h-4" /> Total Department
             </CardTitle>
           </CardHeader>
           <CardContent>

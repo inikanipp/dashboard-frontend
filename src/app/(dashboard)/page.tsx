@@ -577,8 +577,8 @@ export default function DashboardPage() {
               </ChartCard>
 
               <ChartCard
-                title="Revenue per Retailer"
-                description="Revenue per retailer (Top 10)"
+                title="Revenue per Department"
+                description="Revenue per Department (Top 10)"
                 insight={stats?.ordersByRestaurant && stats.ordersByRestaurant.length > 0 ? `Retailer dengan revenue tertinggi: ${stats.ordersByRestaurant[0]?.label || '-'}` : undefined}
                 recommendation="Evaluasi retailer dengan transaksi rendah dan tiru strategi dari retailer terbaik."
               >

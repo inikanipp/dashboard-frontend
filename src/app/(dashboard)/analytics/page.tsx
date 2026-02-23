@@ -497,8 +497,8 @@ export default function AnalyticsPage() {
 
         {data.ordersByRestaurant && data.ordersByRestaurant.length > 0 && (
           <ChartCard 
-            title="Performa Retailer"
-            description="Perbandingan nilai penjualan antar retailer"
+            title="Performa Department"
+            description="Perbandingan nilai penjualan antar department"
             insight={`Retailer tertinggi: ${data.ordersByRestaurant.sort((a,b) => (b.sales||0) - (a.sales||0))[0]?.restaurant || '-'}`}
           >
             <EBarChart 

@@ -328,7 +328,7 @@ export default function OrdersPage() {
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-3 px-2">ID Transaksi</th>
-                    <th className="text-left py-3 px-2">Retailer</th>
+                    <th className="text-left py-3 px-2">Department</th>
                     <th className="text-left py-3 px-2">Produk</th>
                     <th className="text-left py-3 px-2">Kota</th>
                     <th className="text-left py-3 px-2">Tanggal</th>
