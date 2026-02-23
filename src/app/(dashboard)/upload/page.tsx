@@ -118,7 +118,7 @@ export default function UploadPage() {
     const checkBackend = async () => {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
       try {
-        const res = await fetch(`${backendUrl}/api/v1/adidas/test`, { 
+        const res = await fetch(`${backendUrl}/test`, { 
           method: 'GET',
           signal: AbortSignal.timeout(5000)
         })
@@ -268,7 +268,7 @@ export default function UploadPage() {
         const formData = new FormData()
         formData.append('file', selectedFile)
 
-        const previewRes = await fetch(`${backendUrl}/api/v1/adidas/preview`, {
+        const previewRes = await fetch(`${backendUrl}/preview`, {
           method: 'POST',
           body: formData }
         )
@@ -355,7 +355,7 @@ export default function UploadPage() {
 
       setUploadProgress(50)
       
-      const res = await fetch(`${backendUrl}/api/v1/adidas/upload`, {
+      const res = await fetch(`${backendUrl}/upload-transaction`, {
         method: 'POST',
         body: formData
       })

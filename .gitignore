@@ -59,3 +59,5 @@ backend-fastapi/**/__pycache__/
 
 # OS
 Thumbs.db
+
+/src/generated/prisma

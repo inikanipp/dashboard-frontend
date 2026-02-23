@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+// Import supabase telah dihapus karena tidak digunakan
 
 function parseCSV(csvText: string): any[] {
   const lines = csvText.trim().split('\n')

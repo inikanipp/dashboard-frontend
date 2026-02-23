@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+import { prisma } from '@/lib/prisma'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,19 +16,28 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const includeInsights = searchParams.get('includeInsights') === 'true'
 
-    const [transactionsRes, retailersRes, productsRes, methodsRes, citiesRes] = await Promise.all([
-      supabase.from('transaction').select('*').limit(10000),
-      supabase.from('retailer').select('*').order('retailer_name'),
-      supabase.from('product').select('*').order('product'),
-      supabase.from('method').select('*').order('method'),
-      supabase.from('city').select('*, state(*)').order('city')
+    // Ambil semua data yang diperlukan secara paralel
+    const [transactions, retailers, products, methods, cities] = await Promise.all([
+      prisma.transaction.findMany({
+        take: 10000,
+        include: {
+          retailer: true,
+          product: true,
+          method: true,
+          city: {
+            include: { state: true }
+          }
+        },
+        orderBy: { invoice_date: 'desc' }
+      }),
+      prisma.retailer.findMany({ orderBy: { retailer_name: 'asc' } }),
+      prisma.product.findMany({ orderBy: { product: 'asc' } }),
+      prisma.method.findMany({ orderBy: { method: 'asc' } }),
+      prisma.city.findMany({ 
+        include: { state: true },
+        orderBy: { city: 'asc' } 
+      })
     ])
-
-    const transactions = transactionsRes.data || []
-    const retailers = retailersRes.data || []
-    const products = productsRes.data || []
-    const methods = methodsRes.data || []
-    const cities = citiesRes.data || []
 
     const analytics = generateAnalyticsData(transactions)
     
@@ -51,6 +62,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// Fungsi helper untuk memproses data (Logic bisnis tetap sama)
 function generateAnalyticsData(transactions: any[]) {
   const byProduct: Record<string, { units: number; revenue: number; profit: number }> = {}
   const byRetailer: Record<string, { units: number; revenue: number; profit: number }> = {}
@@ -64,45 +76,61 @@ function generateAnalyticsData(transactions: any[]) {
   let totalUnits = 0
 
   for (const t of transactions) {
+    // Handling Data Prisma (Null checking & Type Conversion)
     const productName = t.product?.product || 'Unknown'
     const retailerName = t.retailer?.retailer_name || 'Unknown'
     const methodName = t.method?.method || 'Unknown'
     const cityName = t.city?.city || 'Unknown'
     const stateName = t.city?.state?.state || 'Unknown'
-    const month = t.invoice_date ? t.invoice_date.substring(0, 7) : 'Unknown'
+    
+    // Prisma Date Object ke String YYYY-MM
+    const month = t.invoice_date 
+      ? t.invoice_date.toISOString().substring(0, 7) 
+      : 'Unknown'
 
-    totalRevenue += t.total_sales || 0
-    totalProfit += t.operating_profit || 0
-    totalUnits += t.unit_sold || 0
+    // Prisma Decimal ke Number
+    const sales = Number(t.total_sales || 0)
+    const profit = Number(t.operating_profit || 0)
+    const units = t.unit_sold || 0
 
+    totalRevenue += sales
+    totalProfit += profit
+    totalUnits += units
+
+    // Grouping Product
     if (!byProduct[productName]) byProduct[productName] = { units: 0, revenue: 0, profit: 0 }
-    byProduct[productName].units += t.unit_sold || 0
-    byProduct[productName].revenue += t.total_sales || 0
-    byProduct[productName].profit += t.operating_profit || 0
+    byProduct[productName].units += units
+    byProduct[productName].revenue += sales
+    byProduct[productName].profit += profit
 
+    // Grouping Retailer
     if (!byRetailer[retailerName]) byRetailer[retailerName] = { units: 0, revenue: 0, profit: 0 }
-    byRetailer[retailerName].units += t.unit_sold || 0
-    byRetailer[retailerName].revenue += t.total_sales || 0
-    byRetailer[retailerName].profit += t.operating_profit || 0
+    byRetailer[retailerName].units += units
+    byRetailer[retailerName].revenue += sales
+    byRetailer[retailerName].profit += profit
 
+    // Grouping Method
     if (!byMethod[methodName]) byMethod[methodName] = { units: 0, revenue: 0, profit: 0 }
-    byMethod[methodName].units += t.unit_sold || 0
-    byMethod[methodName].revenue += t.total_sales || 0
-    byMethod[methodName].profit += t.operating_profit || 0
+    byMethod[methodName].units += units
+    byMethod[methodName].revenue += sales
+    byMethod[methodName].profit += profit
 
+    // Grouping City
     if (!byCity[cityName]) byCity[cityName] = { units: 0, revenue: 0, profit: 0 }
-    byCity[cityName].units += t.unit_sold || 0
-    byCity[cityName].revenue += t.total_sales || 0
-    byCity[cityName].profit += t.operating_profit || 0
+    byCity[cityName].units += units
+    byCity[cityName].revenue += sales
+    byCity[cityName].profit += profit
 
+    // Grouping Month
     if (!byMonth[month]) byMonth[month] = { units: 0, revenue: 0, profit: 0 }
-    byMonth[month].units += t.unit_sold || 0
-    byMonth[month].revenue += t.total_sales || 0
-    byMonth[month].profit += t.operating_profit || 0
+    byMonth[month].units += units
+    byMonth[month].revenue += sales
+    byMonth[month].profit += profit
 
+    // Grouping State
     if (!byState[stateName]) byState[stateName] = { units: 0, revenue: 0 }
-    byState[stateName].units += t.unit_sold || 0
-    byState[stateName].revenue += t.total_sales || 0
+    byState[stateName].units += units
+    byState[stateName].revenue += sales
   }
 
   const topProducts = Object.entries(byProduct)

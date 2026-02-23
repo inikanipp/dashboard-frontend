@@ -2,13 +2,13 @@
 
 export const dynamic = 'force-dynamic'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, TrendingUp, Clock, AlertTriangle, CheckCircle2, AlertCircle, Upload, Filter, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
+import { Loader2, TrendingUp, Clock, AlertTriangle, CheckCircle2, Upload, Filter, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
 import Link from 'next/link'
 import { EBarChart, ELineChart, EPieChart } from '@/components/charts/echart-components'
 
@@ -22,14 +22,9 @@ interface AnalyticsData {
   totalOrders: number
   ordersByRestaurant: { restaurant: string; count: number; sales?: number }[]
   ordersByProduct: { product: string; count: number; sales?: number }[]
-  ordersBySize: { size: string; count: number }[]
-  ordersByType: { type: string; count: number }[]
   ordersByMonth: { month: string; count: number; sales?: number }[]
   ordersByLocation: { location: string; count: number; sales?: number }[]
   ordersByMethod: { method: string; count: number; sales?: number }[]
-  delayStats: { onTime: number; delayed: number; rate: number }
-  peakHourStats: { hour: number; count: number }[]
-  paymentStats: { method: string; count: number }[]
   salesStats: { total: number; profit: number; avgOrderValue: number }
 }
 
@@ -41,22 +36,10 @@ interface FilterState {
 }
 
 interface FilterOptions {
-  retailers: { id_retailer: number; retailer_name: string }[]
   products: { id_product: number; product: string }[]
   methods: { id_method: number; method: string }[]
   cities: { id_city: number; city: string }[]
   months: string[]
-}
-
-const COLORS = {
-  primary: '#3b82f6',
-  secondary: '#8b5cf6',
-  accent: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  pink: '#ec4899',
-  purple: '#8b5cf6',
-  cyan: '#06b6d4'
 }
 
 function formatNumber(num: number): string {
@@ -252,8 +235,8 @@ export default function AnalyticsPage() {
   const [filteredData, setFilteredData] = useState<AnalyticsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filterOptions, setFilterOptions] = useState<FilterOptions>({ retailers: [], products: [], methods: [], cities: [], months: [] })
   
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>({ products: [], methods: [], cities: [], months: [] })
   const [filters, setFilters] = useState<FilterState>({
     month: 'all',
     product: 'all',
@@ -262,7 +245,6 @@ export default function AnalyticsPage() {
   })
 
   const userRole = (session?.user as any)?.role || (session?.user as any)?.position || 'STAFF'
-  const userRestaurantId = (session?.user as any)?.restaurantId
   const isSuperAdmin = userRole === 'GM' || userRole === 'ADMIN_PUSAT'
   const isManager = userRole === 'MANAGER'
   const canAccess = isSuperAdmin || isManager
@@ -282,17 +264,16 @@ export default function AnalyticsPage() {
   const loadInitialData = async () => {
     try {
       const [restaurantsRes, filterRes] = await Promise.all([
-        fetch('/api/restaurants'),
-        fetch('/api/dashboard/filter-options')
+        fetch('/api/retailers'), // Memanggil daftar retailer murni
+        fetch('/api/analytics?getFilterOptions=true') // Memanggil endpoint analytics untuk opsi filter
       ])
       
       if (restaurantsRes.ok) {
         const data = await restaurantsRes.json()
-        const rawRestaurants = data.restaurants || data || []
-        const formattedRestaurants = rawRestaurants.map((r: any) => ({
-          id: r.id_retailer || r.id,
-          name: r.retailer_name || r.name,
-          code: r.retailer_name?.substring(0, 3).toUpperCase() || r.code
+        const formattedRestaurants = data.map((r: any) => ({
+          id: r.id_retailer,
+          name: r.retailer_name,
+          code: r.retailer_name?.substring(0, 3).toUpperCase()
         }))
         setRestaurants(formattedRestaurants)
         if (formattedRestaurants.length > 0) {
@@ -302,10 +283,17 @@ export default function AnalyticsPage() {
 
       if (filterRes.ok) {
         const filterData = await filterRes.json()
-        setFilterOptions(filterData)
+        if (filterData.filterOptions) {
+          setFilterOptions({
+            months: filterData.filterOptions.months || [],
+            products: filterData.filterOptions.products?.map((p: string, i: number) => ({ id_product: i, product: p })) || [],
+            cities: filterData.filterOptions.cities?.map((c: string, i: number) => ({ id_city: i, city: c })) || [],
+            methods: filterData.filterOptions.methods?.map((m: string, i: number) => ({ id_method: i, method: m })) || []
+          })
+        }
       }
     } catch (err) {
-      console.error('Error loading data:', err)
+      console.error('Error loading initial data:', err)
     }
   }
 
@@ -315,35 +303,17 @@ export default function AnalyticsPage() {
     setError(null)
     try {
       const params = new URLSearchParams()
-      if (selectedRestaurant !== 'all') params.set('retailer', selectedRestaurant)
+      if (selectedRestaurant !== 'all') params.set('retailerId', selectedRestaurant)
       if (filters.month !== 'all') params.set('month', filters.month)
       if (filters.product !== 'all') params.set('product', filters.product)
       if (filters.city !== 'all') params.set('city', filters.city)
       if (filters.method !== 'all') params.set('method', filters.method)
       
-      const res = await fetch(`/api/dashboard/charts?${params.toString()}`)
+      const res = await fetch(`/api/analytics?${params.toString()}`)
       const data = await res.json()
       
-      if (data.totalOrders > 0 || (data.ordersByRestaurant && data.ordersByRestaurant.some((r: any) => r.value > 0))) {
-        const analyticsData: AnalyticsData = {
-          totalOrders: data.totalOrders,
-          ordersByRestaurant: data.ordersByRestaurant || [],
-          ordersByProduct: data.pizzaTypes?.map((p: any) => ({ product: p.label, count: p.value, sales: p.value })) || [],
-          ordersBySize: data.pizzaSizes || [],
-          ordersByType: data.pizzaTypes?.slice(0, 5) || [],
-          ordersByMonth: data.deliveryPerformance?.map((d: any) => ({ month: d.label, count: d.value, sales: d.value })) || [],
-          ordersByLocation: data.byCity?.map((c: any) => ({ location: c.label, count: c.value, sales: c.value })) || [],
-          ordersByMethod: data.paymentMethods?.map((m: any) => ({ method: m.label, count: m.value })) || [],
-          delayStats: { onTime: 0, delayed: 0, rate: 0 },
-          peakHourStats: data.peakHours?.map((h: any, i: number) => ({ hour: i, count: h.value })) || [],
-          paymentStats: data.paymentMethods || [],
-          salesStats: { 
-            total: data.totalRevenue || 0, 
-            profit: data.totalProfit || 0, 
-            avgOrderValue: data.avgOrderValue || 0 
-          }
-        }
-        setFilteredData(analyticsData)
+      if (data.totalOrders > 0) {
+        setFilteredData(data)
       } else {
         setFilteredData(null)
       }
@@ -392,7 +362,7 @@ export default function AnalyticsPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Analytics & Insights</h1>
-            <p className="text-slate-500">Analisis data penjualan Adidas dengan insights actionable</p>
+            <p className="text-slate-500">Analisis data penjualan dengan insights actionable</p>
           </div>
           {isSuperAdmin && restaurants.length > 0 && (
             <Select value={selectedRestaurant} onValueChange={setSelectedRestaurant}>
@@ -405,7 +375,6 @@ export default function AnalyticsPage() {
           )}
         </div>
         
-        {/* Filter tetap visible meskipun tidak ada data */}
         <DataSlicer
           filters={filters}
           setFilters={setFilters}
@@ -431,21 +400,12 @@ export default function AnalyticsPage() {
 
   const data = filteredData
 
-  const getTotalRevenue = () => {
-    return data.ordersByMonth?.reduce((sum: number, m: any) => sum + (m.sales || 0), 0) || 0
-  }
-
-  const getTotalProfit = () => {
-    return data.ordersByProduct?.reduce((sum: number, p: any) => sum + (p.sales || 0), 0) || 0
-  }
-
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Analytics & Insights</h1>
-          <p className="text-slate-500">Analisis mendalam data penjualan Adidas</p>
+          <p className="text-slate-500">Analisis mendalam data penjualan</p>
         </div>
         <div className="flex items-center gap-3">
           {isSuperAdmin && restaurants.length > 0 && (
@@ -460,7 +420,6 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Data Slicer */}
       <DataSlicer
         filters={filters}
         setFilters={setFilters}
@@ -474,12 +433,12 @@ export default function AnalyticsPage() {
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2 font-semibold text-blue-700">
-              <TrendingUp className="w-4 h-4" /> Total Transaksi
+              <TrendingUp className="w-4 h-4" /> Total Unit Terjual
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-blue-800">{formatNumber(data.totalOrders)}</p>
-            <p className="text-xs text-blue-600/70 mt-1">Unit terjual</p>
+            <p className="text-xs text-blue-600/70 mt-1">Total Unit</p>
           </CardContent>
         </Card>
 
@@ -490,8 +449,8 @@ export default function AnalyticsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-emerald-800">{formatCurrency(getTotalRevenue())}</p>
-            <p className="text-xs text-emerald-600/70 mt-1">Total penjualan</p>
+            <p className="text-3xl font-bold text-emerald-800">{formatCurrency(data.salesStats?.total || 0)}</p>
+            <p className="text-xs text-emerald-600/70 mt-1">Total Penjualan</p>
           </CardContent>
         </Card>
 
@@ -502,8 +461,8 @@ export default function AnalyticsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-rose-800">{formatCurrency(getTotalProfit())}</p>
-            <p className="text-xs text-rose-600/70 mt-1">Estimasi keuntungan</p>
+            <p className="text-3xl font-bold text-rose-800">{formatCurrency(data.salesStats?.profit || 0)}</p>
+            <p className="text-xs text-rose-600/70 mt-1">Estimasi Keuntungan</p>
           </CardContent>
         </Card>
 
@@ -515,18 +474,16 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-violet-800">{formatCurrency(data.salesStats?.avgOrderValue || 0)}</p>
-            <p className="text-xs text-violet-600/70 mt-1">Per transaksi</p>
+            <p className="text-xs text-violet-600/70 mt-1">Per Unit Terjual</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Charts Grid - Row 1: Trend & Restaurant */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard 
           title="Tren Penjualan per Bulan"
-          description="Visualisasi total penjualan (dalam Rupiah) Adidas dari waktu ke waktu"
-          insight={data.ordersByMonth && data.ordersByMonth.length > 0 ? `Total revenue: ${formatCurrency(data.ordersByMonth.reduce((s: number, m: any) => s + (m.sales || 0), 0))}` : undefined}
-          recommendation="Pastikan stock mencukupi pada bulan dengan penjualan tinggi. Pertimbangkan promo pada bulan dengan penjualan rendah."
+          description="Visualisasi total penjualan berdasarkan waktu"
+          insight={data.ordersByMonth && data.ordersByMonth.length > 0 ? `Total revenue: ${formatCurrency(data.salesStats?.total)}` : undefined}
         >
           {data.ordersByMonth && data.ordersByMonth.length > 0 ? (
             <ELineChart 
@@ -535,18 +492,17 @@ export default function AnalyticsPage() {
               isCurrency={true}
               height={280}
             />
-          ) : <EmptyChart message="Belum ada data" />}
+          ) : <EmptyChart message="Belum ada data bulanan" />}
         </ChartCard>
 
         {data.ordersByRestaurant && data.ordersByRestaurant.length > 0 && (
           <ChartCard 
             title="Performa Retailer"
-            description="Perbandingan jumlah transaksi antar retailer"
-            insight={`Retailer terbaik: ${data.ordersByRestaurant[0]?.restaurant || '-'}`}
-            recommendation="Evaluasi retailer dengan transaksi rendah dan tiru strategi dari retailer terbaik."
+            description="Perbandingan nilai penjualan antar retailer"
+            insight={`Retailer tertinggi: ${data.ordersByRestaurant.sort((a,b) => (b.sales||0) - (a.sales||0))[0]?.restaurant || '-'}`}
           >
             <EBarChart 
-              data={data.ordersByRestaurant.map(d => ({ label: d.restaurant, value: d.sales || 0 }))} 
+              data={data.ordersByRestaurant.map(d => ({ label: d.restaurant, value: d.sales || 0 })).sort((a,b) => b.value - a.value)} 
               color="#3b82f6"
               isCurrency={true}
               height={280}
@@ -555,24 +511,21 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {/* Charts Grid - Row 2: Product Stats (3 columns) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <ChartCard 
-          title="Distribusi Produk"
-          description="Jumlah unit terjual berdasarkan produk"
-          insight={data.ordersByProduct && data.ordersByProduct.length > 0 ? `Produk paling laris: ${data.ordersByProduct[0]?.product || '-'}` : undefined}
-          recommendation="Pastikan stock produk terlaris selalu tersedia."
+          title="Unit Terjual (Produk)"
+          description="Komposisi penjualan unit berdasarkan produk"
+          insight={data.ordersByProduct && data.ordersByProduct.length > 0 ? `Produk unit terbanyak: ${data.ordersByProduct.sort((a,b) => b.count - a.count)[0]?.product || '-'}` : undefined}
         >
           {data.ordersByProduct && data.ordersByProduct.length > 0 ? (
             <EPieChart data={data.ordersByProduct.map(d => ({ label: d.product, value: d.count }))} height={280} />
-          ) : <EmptyChart message="Belum ada data" />}
+          ) : <EmptyChart message="Belum ada data produk" />}
         </ChartCard>
 
         <ChartCard 
-          title="Produk Terlaris (Revenue)"
-          description="Produk dengan revenue tertinggi"
+          title="Top 5 Produk (Revenue)"
+          description="Produk yang menghasilkan nilai penjualan tertinggi"
           insight={data.ordersByProduct && data.ordersByProduct.length > 0 ? `Revenue tertinggi: ${data.ordersByProduct[0]?.product || '-'}` : undefined}
-          recommendation="Fokuskan marketing pada produk dengan revenue tinggi."
         >
           {data.ordersByProduct && data.ordersByProduct.length > 0 ? (
             <EPieChart 
@@ -585,10 +538,9 @@ export default function AnalyticsPage() {
         </ChartCard>
 
         <ChartCard 
-          title="Top 5 Kota"
-          description="Kota dengan penjualan tertinggi"
-          insight={data.ordersByLocation && data.ordersByLocation.length > 0 ? `Kota terbaik: ${data.ordersByLocation[0]?.location || '-'}` : undefined}
-          recommendation="Fokuskan ekspansi di kota-kota dengan potensi tinggi."
+          title="Top 5 Kota (Revenue)"
+          description="Kota dengan nilai penjualan tertinggi"
+          insight={data.ordersByLocation && data.ordersByLocation.length > 0 ? `Kota tertinggi: ${data.ordersByLocation[0]?.location || '-'}` : undefined}
         >
           {data.ordersByLocation && data.ordersByLocation.length > 0 ? (
             <EBarChart 
@@ -600,24 +552,21 @@ export default function AnalyticsPage() {
               isCurrency={true}
               height={280}
             />
-          ) : <EmptyChart message="Belum ada data" />}
+          ) : <EmptyChart message="Belum ada data lokasi" />}
         </ChartCard>
       </div>
 
-      {/* Charts Grid - Row 3 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {data.ordersByLocation && data.ordersByLocation.length > 0 && (
           <ChartCard 
-            title="Kota dengan Transaksi Tertinggi"
-            description="Area geografis dengan volume transaksi tertinggi"
-            insight={`Total ${data.ordersByLocation.reduce((s: number, c: any) => s + c.count, 0)} transaksi`}
-            recommendation="Analisa pola transaksi per kota untuk strategi yang lebih baik."
+            title="Volume Transaksi per Kota"
+            description="Jumlah unit yang terjual berdasarkan lokasi"
           >
             <EBarChart 
               data={data.ordersByLocation.slice(0, 10).map(d => ({ 
                 label: d.location?.length > 15 ? d.location.substring(0, 15) + '...' : d.location, 
                 value: d.count 
-              }))} 
+              })).sort((a,b) => b.value - a.value)} 
               color="#22c55e"
               height={280}
             />
@@ -627,14 +576,13 @@ export default function AnalyticsPage() {
         {data.ordersByMethod && data.ordersByMethod.length > 0 && (
           <ChartCard 
             title="Metode Penjualan"
-            description="Distribusi berdasarkan cara penjualan"
-            insight={data.ordersByMethod.length > 0 ? `Metode paling banyak: ${data.ordersByMethod[0]?.method || '-'}` : undefined}
-            recommendation="Pastikan sistem penjualan utama berjalan lancer. Eksplorasi metode alternatif."
+            description="Distribusi pendapatan berdasarkan metode"
           >
             <EPieChart 
-              data={data.ordersByMethod.map(d => ({ label: d.method, value: d.count }))} 
+              data={data.ordersByMethod.map(d => ({ label: d.method, value: d.sales || 0 })).sort((a,b) => b.value - a.value)} 
               colors={['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444']}
               height={280}
+              isCurrency={true}
             />
           </ChartCard>
         )}

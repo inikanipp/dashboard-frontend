@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import LogoArtavista from '../../../public/logo-artavista.png'
 import { useState, useEffect, useRef } from 'react'
 import {
   LayoutDashboard,
@@ -47,7 +48,7 @@ const managerNavigation = [
 ]
 
 const adminNavigation = [
-  { name: 'Retailer', href: '/restaurants', icon: Store, roles: ['GM'] },
+  { name: 'Retailer', href: '/retailer', icon: Store, roles: ['GM'] },
 ]
 
 function getRoleLabel(role: string | undefined) {
@@ -164,11 +165,8 @@ export function Sidebar({ className }: SidebarProps) {
         className="flex items-center gap-3 px-6 py-5 border-b"
         style={{ borderColor: 'var(--sidebar-border)' }}
       >
-        <img
-          src="/Logo Artavista.png"
-          alt="Artavista"
-          className="w-48 h-auto rounded-lg object-contain"
-        />
+      <img src={LogoArtavista.src} alt="Logo" className="w-32 h-auto drop-shadow-lg " />
+
       </div>
 
       {/* Navigation */}
@@ -378,3 +376,4 @@ export function Sidebar({ className }: SidebarProps) {
     </div>
   )
 }
+

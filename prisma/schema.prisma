@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+  
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id
+  email     String    @unique
+  password  String
+  name      String
+  role      String    @default("STAFF")
+  position  String    @default("STAFF")
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
+  lastLogin DateTime? @default(now())
+
+  retailerId Int?
+  retailer   retailer? @relation(fields: [retailerId], references: [id_retailer])
+}
+
+model city {
+  id_city     Int           @id
+  city        String?       @db.VarChar
+  id_state    Int
+  state       state         @relation(fields: [id_state], references: [id_state], onDelete: NoAction, onUpdate: NoAction, map: "fk_city_state")
+  transaction transaction[]
+}
+
+model method {
+  id_method   Int           @id
+  method      String?       @db.VarChar
+  transaction transaction[]
+}
+
+model product {
+  id_product  Int           @id
+  product     String?       @db.VarChar
+  transaction transaction[]
+}
+
+model retailer {
+  id_retailer   Int           @id @default(autoincrement())
+  retailer_name String?       @db.VarChar
+  transaction   transaction[]
+
+  users         User[]
+}
+
+model state {
+  id_state Int     @id @default(autoincrement())
+  state    String? @db.VarChar
+  city     city[]
+}
+
+model transaction {
+  id_transaction   Int       @default(autoincrement())
+  id_retailer      Int
+  id_product       Int
+  id_method        Int
+  id_city          Int
+  invoice_date     DateTime? @db.Date
+  price_per_unit   Decimal?  @db.Decimal
+  unit_sold        Int?
+  total_sales      Decimal?  @db.Decimal
+  operating_profit Decimal?  @db.Decimal
+  operating_margin Decimal?  @db.Decimal
+  city             city      @relation(fields: [id_city], references: [id_city], onDelete: NoAction, onUpdate: NoAction, map: "fk_transaction_city1")
+  method           method    @relation(fields: [id_method], references: [id_method], onDelete: NoAction, onUpdate: NoAction, map: "fk_transaction_method1")
+  product          product   @relation(fields: [id_product], references: [id_product], onDelete: NoAction, onUpdate: NoAction, map: "fk_transaction_product1")
+  retailer         retailer  @relation(fields: [id_retailer], references: [id_retailer], onDelete: NoAction, onUpdate: NoAction, map: "fk_transaction_retailer1")
+
+  @@id([id_transaction, id_retailer, id_product, id_method, id_city])
+}
+
+model upload_history {
+  id_upload     Int      @id @default(autoincrement())
+  file_name     String   @db.VarChar
+  system_name   String   @db.VarChar
+  status        String   @db.VarChar
+  note          String?
+  total_rows    Int?
+  uploaded_by   String   @db.VarChar
+  uploaded_date DateTime @default(now()) @db.Timestamp(6)
+}

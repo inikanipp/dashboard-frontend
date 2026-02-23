@@ -334,13 +334,14 @@ export default function OrdersPage() {
                     <th className="text-left py-3 px-2">Tanggal</th>
                     <th className="text-left py-3 px-2">Unit</th>
                     <th className="text-left py-3 px-2">Total Sales</th>
-                    <th className="text-right py-3 px-2">Aksi</th>
+                    {/* th Aksi dihapus dari sini */}
                   </tr>
                 </thead>
                 <tbody>
                   {error ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-8">
+                      {/* colSpan diubah dari 8 menjadi 7 */}
+                      <td colSpan={7} className="text-center py-8">
                         <div className="flex flex-col items-center gap-3">
                           <p className="text-red-500 font-medium">{error}</p>
                           <Button 
@@ -355,7 +356,8 @@ export default function OrdersPage() {
                     </tr>
                   ) : filteredOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-8">
+                      {/* colSpan diubah dari 8 menjadi 7 */}
+                      <td colSpan={7} className="text-center py-8">
                         <div className="flex flex-col items-center gap-3">
                           <p style={{ color: 'var(--muted-foreground)' }}>
                             Tidak ada data transaksi. Silakan upload data terlebih dahulu.
@@ -380,25 +382,7 @@ export default function OrdersPage() {
                         <td className="py-3 px-2">{order.invoiceDate}</td>
                         <td className="py-3 px-2">{order.unitSold}</td>
                         <td className="py-3 px-2">Rp {order.totalSales.toLocaleString('id-ID')}</td>
-                        <td className="py-3 px-2 text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openEditDialog(order)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(order.id)}
-                              style={{ color: 'var(--destructive)' }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
+                        {/* td yang berisi tombol Edit dan Hapus dihapus dari sini */}
                       </tr>
                     ))
                   )}

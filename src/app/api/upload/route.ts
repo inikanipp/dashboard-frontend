@@ -1,26 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+import { prisma } from '@/lib/prisma'
 
 export async function GET(req: NextRequest) {
   try {
-    const { data: transactionCount, error: countError } = await supabase
-      .from('transaction')
-      .select('*', { count: 'exact', head: true })
-
-    const { data: retailers, error: retailerError } = await supabase
-      .from('retailer')
-      .select('*')
-
-    const { data: recentData, error: recentError } = await supabase
-      .from('transaction')
-      .select('*, retailer(retailer_name), product(product), city(city)')
-      .order('invoice_date', { ascending: false })
-      .limit(5)
+    const [transactionCount, retailers, recentData] = await Promise.all([
+      prisma.transaction.count(),
+      prisma.retailer.findMany(),
+      prisma.transaction.findMany({
+        take: 5,
+        orderBy: {
+          invoice_date: 'desc'
+        },
+        include: {
+          retailer: { select: { retailer_name: true } },
+          product: { select: { product: true } },
+          city: { select: { city: true } }
+        }
+      })
+    ])
 
     return NextResponse.json({
-      totalCount: transactionCount?.length || 0,
+      totalCount: transactionCount || 0,
       retailers: retailers || [],
       recentData: recentData || []
     })
@@ -52,64 +54,60 @@ export async function POST(req: NextRequest) {
     const userId = session.user?.email || 'unknown'
     const userName = (session.user as any)?.name || session.user?.email || 'Unknown'
     const userRole = (session.user as any)?.role || (session.user as any)?.position || 'STAFF'
-    const userRestaurantId = (session.user as any)?.restaurantId || null
+    const userRetailerId = (session.user as any)?.retailerId || null
 
-    // Get master data IDs from Supabase
-    const { data: retailers } = await supabase.from('retailer').select('id_retailer, retailer_name')
-    const { data: products } = await supabase.from('product').select('id_product, product')
-    const { data: methods } = await supabase.from('method').select('id_method, method')
-    const { data: cities } = await supabase.from('city').select('id_city, city')
+    // Mengambil semua data referensi yang dibutuhkan dari Prisma
+    const [retailers, products, methods, cities] = await Promise.all([
+      prisma.retailer.findMany({ select: { id_retailer: true, retailer_name: true } }),
+      prisma.product.findMany({ select: { id_product: true, product: true } }),
+      prisma.method.findMany({ select: { id_method: true, method: true } }),
+      prisma.city.findMany({ select: { id_city: true, city: true } })
+    ])
 
-    // Helper functions
+    // Fungsi pembantu untuk mencocokkan ID (dengan fallback ke ID = 1 jika tidak ketemu)
     const getRetailerId = (name: string) => {
-      if (!retailers) return null
       const found = retailers.find(r => r.retailer_name?.toLowerCase() === name?.toLowerCase())
-      return found?.id_retailer || null
+      return found?.id_retailer || 1
     }
 
     const getProductId = (name: string) => {
-      if (!products) return null
       const found = products.find(p => p.product?.toLowerCase() === name?.toLowerCase())
-      return found?.id_product || null
+      return found?.id_product || 1
     }
 
     const getMethodId = (name: string) => {
-      if (!methods || !name) return null
       const found = methods.find(m => m.method?.toLowerCase() === name?.toLowerCase())
-      return found?.id_method || null
+      return found?.id_method || 1
     }
 
     const getCityId = (name: string) => {
-      if (!cities || !name) return null
       const found = cities.find(c => c.city?.toLowerCase() === name?.toLowerCase())
-      return found?.id_city || null
+      return found?.id_city || 1
     }
 
-    // Create upload history with full user tracking
-    const { data: uploadRecord } = await supabase
-      .from('upload_history')
-      .insert([{
+    // 1. Buat record upload_history terlebih dahulu
+    const uploadRecord = await prisma.upload_history.create({
+      data: {
         file_name: 'uploaded_file.xlsx',
         system_name: 'adidas_sales',
         status: 'processing',
-        note: `Uploaded by ${userName} (${userRole})${userRestaurantId ? ' - Retailer ID: ' + userRestaurantId : ''}`,
+        note: `Uploaded by ${userName} (${userRole})${userRetailerId ? ' - Retailer ID: ' + userRetailerId : ''}`,
         total_rows: cleanedData.length,
         uploaded_by: `${userName} (${userId})`,
-        uploaded_date: new Date().toISOString()
-      }])
-      .select()
-      .single()
+        // uploaded_date akan otomatis diisi dengan @default(now()) dari schema
+      }
+    })
 
-    const uploadId = uploadRecord?.id_upload
+    const uploadId = uploadRecord.id_upload
 
-    // Transform and insert transactions - using new field names from cleaning service
+    // 2. Siapkan data transaksi yang akan di-insert
     const transactions = cleanedData.map((row: any) => ({
-      id_retailer: getRetailerId(row.retailer) || 1,
-      id_product: getProductId(row.product) || 1,
+      id_retailer: getRetailerId(row.retailer),
+      id_product: getProductId(row.product),
       id_method: getMethodId(row.sales_method),
-      id_city: getCityId(row.city) || 1,
+      id_city: getCityId(row.city),
       id_upload: uploadId,
-      invoice_date: row.invoice_date ? new Date(row.invoice_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      invoice_date: row.invoice_date ? new Date(row.invoice_date) : new Date(),
       price_per_unit: parseFloat(row.price_per_unit) || 0,
       unit_sold: parseInt(row.units_sold) || 1,
       total_sales: parseFloat(row.total_sales) || 0,
@@ -117,33 +115,32 @@ export async function POST(req: NextRequest) {
       operating_margin: parseFloat(row.operating_margin) || 0
     })).filter((t: any) => t.total_sales > 0)
 
-    // Insert in batches
-    const batchSize = 100
+    // 3. Insert transaksi secara massal (bulk insert)
     let successfullySaved = 0
     let failedRows = 0
 
-    for (let i = 0; i < transactions.length; i += batchSize) {
-      const batch = transactions.slice(i, i + batchSize)
-      const { error } = await supabase.from('transaction').insert(batch)
+    try {
+      // Prisma createMany jauh lebih efisien daripada melakukan loop batch secara manual
+      const result = await prisma.transaction.createMany({
+        data: transactions,
+        skipDuplicates: true // Opsional: mengabaikan baris yang mungkin duplikat
+      })
       
-      if (error) {
-        console.error('Supabase insert error:', error)
-        failedRows += batch.length
-      } else {
-        successfullySaved += batch.length
-      }
+      successfullySaved = result.count
+      failedRows = transactions.length - successfullySaved
+    } catch (insertError: any) {
+      console.error('Prisma insert error:', insertError)
+      failedRows = transactions.length
     }
 
-    // Update upload history status
-    if (uploadId) {
-      await supabase
-        .from('upload_history')
-        .update({ 
-          status: failedRows > 0 ? 'partial' : 'success',
-          note: `Saved: ${successfullySaved}, Failed: ${failedRows}`
-        })
-        .eq('id_upload', uploadId)
-    }
+    // 4. Update status upload_history
+    await prisma.upload_history.update({
+      where: { id_upload: uploadId },
+      data: {
+        status: failedRows > 0 && successfullySaved > 0 ? 'partial' : failedRows === transactions.length ? 'failed' : 'success',
+        note: `Saved: ${successfullySaved}, Failed: ${failedRows}`
+      }
+    })
 
     return NextResponse.json({
       success: true,

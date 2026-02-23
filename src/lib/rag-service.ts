@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { prisma } from '@/lib/prisma'
 import { getConfig, getContextFromEnv } from './rag-config'
 
 export interface SalesDataContext {
@@ -25,28 +25,46 @@ export interface VisualizationInsight {
 export async function getAdidasDataContext(): Promise<SalesDataContext> {
   try {
     const config = getConfig(getContextFromEnv())
-    console.log('Fetching Adidas data from Supabase...')
+    console.log('Fetching Adidas data from Prisma...')
 
-    const [transactionsRes, retailersRes, productsRes, methodsRes, citiesRes] = await Promise.all([
-      supabase.from('transaction').select('*').limit(10000),
-      supabase.from('retailer').select('*').order('retailer_name'),
-      supabase.from('product').select('*').order('product'),
-      supabase.from('method').select('*').order('method'),
-      supabase.from('city').select('*, state(*)').order('city')
+    // Fetch data paralel menggunakan Prisma
+    const [transactionsRaw, retailers, products, methods, cities] = await Promise.all([
+      prisma.transaction.findMany({
+        take: 10000,
+        include: {
+          retailer: true,
+          product: true,
+          method: true,
+          city: { include: { state: true } }
+        },
+        orderBy: { invoice_date: 'desc' }
+      }),
+      prisma.retailer.findMany({ orderBy: { retailer_name: 'asc' } }),
+      prisma.product.findMany({ orderBy: { product: 'asc' } }),
+      prisma.method.findMany({ orderBy: { method: 'asc' } }),
+      prisma.city.findMany({ include: { state: true }, orderBy: { city: 'asc' } })
     ])
 
-    const transactions = transactionsRes.data || []
-    const retailers = retailersRes.data || []
-    const products = productsRes.data || []
-    const methods = methodsRes.data || []
-    const cities = citiesRes.data || []
+    // Normalisasi data Prisma (Decimal ke Number, Date ke String YYYY-MM-DD)
+    const transactions = transactionsRaw.map(t => ({
+      ...t,
+      invoice_date: t.invoice_date ? t.invoice_date.toISOString().substring(0, 10) : '',
+      total_sales: Number(t.total_sales || 0),
+      operating_profit: Number(t.operating_profit || 0),
+      unit_sold: t.unit_sold || 0,
+      price_per_unit: Number(t.price_per_unit || 0),
+      operating_margin: Number(t.operating_margin || 0)
+    }))
 
     console.log(`Found ${transactions.length} transactions, ${retailers.length} retailers`)
 
     const analytics = generateAnalytics(transactions, retailers, products, methods, cities)
     const insights = generateInsights(analytics, transactions)
     const recommendations = generateRecommendations(analytics, transactions)
-    const forecasting = await getForecastingData()
+    
+    // PERBAIKAN: Hitung forecasting langsung dari data transaksi, tidak perlu fetch API lagi
+    const forecasting = getForecastingData(transactions)
+    
     const visualizationInsights = generateVisualizationInsights(analytics)
 
     const summary = {
@@ -332,50 +350,56 @@ function generateVisualizationInsights(analytics: any): any[] {
   return insights
 }
 
-async function getForecastingData() {
-  try {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    
-    const summaryRes = await fetch(`${appUrl}/api/v1/analytics-data/summary`, {
-      next: { revalidate: 0 }
-    })
-    const summaryData = await summaryRes.json()
+// PERBAIKAN: Hitung forecasting langsung dari memori tanpa API Fetch
+function getForecastingData(transactions: any[]) {
+  if (!transactions || transactions.length < 3) return null;
 
-    if (!summaryData.success || summaryData.total_orders === 0) {
-      return null
+  // Mengelompokkan transaksi per bulan untuk mendapatkan tren (YYYY-MM)
+  const groupedData: Record<string, number> = {};
+  for (const t of transactions) {
+    const dateVal = t.invoice_date ? t.invoice_date.substring(0, 7) : '';
+    if (dateVal) {
+      groupedData[dateVal] = (groupedData[dateVal] || 0) + (t.total_sales || 0);
     }
-
-    const allDataRes = await fetch(`${appUrl}/api/v1/analytics-data/all-data`, {
-      next: { revalidate: 0 }
-    })
-    const allData = await allDataRes.json()
-
-    if (!allData.data || allData.data.length === 0) {
-      return null
-    }
-
-    const csvData = convertToCSV(allData.data)
-    const formData = new FormData()
-    formData.append('file', new Blob([csvData], { type: 'text/csv' }))
-    formData.append('date_column', 'invoice_date')
-    formData.append('value_column', 'total_sales')
-    formData.append('periods', '7')
-
-    const forecastRes = await fetch(`${appUrl}/api/v1/forecasting/exponential-smoothing`, {
-      method: 'POST',
-      body: formData
-    })
-    const forecastResult = await forecastRes.json()
-
-    if (forecastResult.historical && forecastResult.forecast) {
-      return generateForecastingInsights(forecastResult)
-    }
-
-    return null
-  } catch (error) {
-    console.error('Error fetching forecasting data:', error)
-    return null
   }
+
+  const sortedDates = Object.keys(groupedData).sort();
+  const timeSeriesData = sortedDates.map(date => groupedData[date]);
+
+  // Butuh minimal 3 data poin untuk forecasting yang valid
+  if (timeSeriesData.length < 3) return null;
+
+  const periods = 3; // Prediksi 3 bulan ke depan
+  const forecast = exponentialSmoothing(timeSeriesData, 0.3, periods);
+
+  const historical = sortedDates.map((date, i) => ({
+    date,
+    actual: timeSeriesData[i],
+    forecast: i > 0 ? timeSeriesData[i - 1] : timeSeriesData[0]
+  }));
+
+  const forecastResult = { method: 'Exponential Smoothing', historical, forecast };
+  return generateForecastingInsights(forecastResult);
+}
+
+// PERBAIKAN: Fungsi matematika algoritma Exponential Smoothing
+function exponentialSmoothing(data: number[], alpha: number = 0.3, periods: number = 7): number[] {
+  if (data.length === 0) return []
+  
+  const forecasts: number[] = []
+  let smoothed = data[0]
+  
+  for (let i = 0; i < data.length; i++) {
+    forecasts.push(smoothed)
+    smoothed = alpha * data[i] + (1 - alpha) * smoothed
+  }
+  
+  const futureForecasts: number[] = []
+  for (let i = 0; i < periods; i++) {
+    futureForecasts.push(smoothed)
+  }
+  
+  return futureForecasts
 }
 
 function generateForecastingInsights(forecastResult: any): any {
@@ -426,22 +450,6 @@ function generateForecastingInsights(forecastResult: any): any {
     insights,
     recommendations
   }
-}
-
-function convertToCSV(data: any[]): string {
-  if (data.length === 0) return ''
-  const headers = Object.keys(data[0])
-  const csvRows = [headers.join(',')]
-  for (const row of data) {
-    const values = headers.map(h => {
-      const val = row[h]
-      if (val === null || val === undefined) return ''
-      if (typeof val === 'string' && val.includes(',')) return `"${val}"`
-      return val
-    })
-    csvRows.push(values.join(','))
-  }
-  return csvRows.join('\n')
 }
 
 function formatNumber(num: number): string {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,19 +13,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: retailers } = await supabase.from('retailer').select('id_retailer, retailer_name').order('retailer_name')
-    const { data: products } = await supabase.from('product').select('id_product, product').order('product')
-    const { data: methods } = await supabase.from('method').select('id_method, method').order('method')
-    const { data: cities } = await supabase.from('city').select('id_city, city').order('city')
+    // Ambil semua data master secara paralel menggunakan Prisma
+    const [retailers, products, methods, cities, transactions] = await Promise.all([
+      prisma.retailer.findMany({ select: { id_retailer: true, retailer_name: true }, orderBy: { retailer_name: 'asc' } }),
+      prisma.product.findMany({ select: { id_product: true, product: true }, orderBy: { product: 'asc' } }),
+      prisma.method.findMany({ select: { id_method: true, method: true }, orderBy: { method: 'asc' } }),
+      prisma.city.findMany({ select: { id_city: true, city: true }, orderBy: { city: 'asc' } }),
+      prisma.transaction.findMany({ select: { invoice_date: true }, orderBy: { invoice_date: 'asc' } })
+    ])
 
-    const { data: transactions } = await supabase.from('transaction').select('invoice_date').order('invoice_date')
-    
+    // Ekstrak bulan unik (YYYY-MM)
     const monthsSet = new Set<string>()
-    transactions?.forEach(t => {
+    transactions.forEach(t => {
       if (t.invoice_date) {
-        monthsSet.add(t.invoice_date.substring(0, 7))
+        // Format date ke YYYY-MM
+        const dateStr = t.invoice_date.toISOString().substring(0, 7)
+        monthsSet.add(dateStr)
       }
     })
+    
     const months = Array.from(monthsSet).sort().reverse()
 
     return NextResponse.json({

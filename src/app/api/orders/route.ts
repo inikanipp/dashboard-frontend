@@ -1,182 +1,129 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+import { prisma } from '@/lib/prisma'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { searchParams } = new URL(req.url)
-    const retailerId = searchParams.get('restaurant')
+    const restaurant = searchParams.get('restaurant')
 
-    const userRole = (session.user as any).role || (session.user as any).position || 'STAFF'
-    const userRestaurantId = (session.user as any)?.restaurantId
-    
-    const isSuperAdmin = userRole === 'GM' || userRole === 'ADMIN_PUSAT'
-
-    let query = supabase
-      .from('transaction')
-      .select(`
-        *,
-        retailer(retailer_name),
-        product(product),
-        method(method),
-        city(city)
-      `)
-      .order('invoice_date', { ascending: false })
-      .limit(100)
-
-    if (!isSuperAdmin && userRestaurantId) {
-      query = query.eq('id_retailer', parseInt(userRestaurantId))
-    } else if (retailerId && retailerId !== 'all') {
-      query = query.eq('id_retailer', parseInt(retailerId))
+    const where: any = {}
+    if (restaurant && restaurant !== 'all') {
+      where.id_retailer = parseInt(restaurant)
     }
 
-    const { data: orders, error } = await query
+    const transactions = await prisma.transaction.findMany({
+      where,
+      include: {
+        retailer: true,
+        product: true,
+        method: true,
+        city: { include: { state: true } }
+      },
+      orderBy: { invoice_date: 'desc' },
+      take: 100 
+    })
 
-    if (error) throw error
-
-    const formattedOrders = (orders || []).map(t => ({
-      id: t.id_transaction,
-      transactionId: `TXN-${t.id_transaction}`,
+    const formattedOrders = transactions.map(t => ({
+      id: t.id_transaction.toString(), 
+      transactionId: `TRX-${t.id_transaction}`, 
       retailerId: t.id_retailer,
-      retailerName: (t as any).retailer?.retailer_name || '-',
-      productName: (t as any).product?.product || '-',
-      methodName: (t as any).method?.method || '-',
-      cityName: (t as any).city?.city || '-',
-      invoiceDate: t.invoice_date,
-      pricePerUnit: t.price_per_unit,
-      unitSold: t.unit_sold,
-      totalSales: t.total_sales,
-      operatingProfit: t.operating_profit,
-      operatingMargin: t.operating_margin
+      retailerName: t.retailer?.retailer_name || '-',
+      productId: t.id_product,
+      productName: t.product?.product || '-',
+      methodId: t.id_method,
+      methodName: t.method?.method || '-',
+      cityId: t.id_city,
+      cityName: t.city?.city || '-',
+      stateName: t.city?.state?.state || '-',
+      invoiceDate: t.invoice_date ? t.invoice_date.toISOString().split('T')[0] : '',
+      pricePerUnit: Number(t.price_per_unit || 0),
+      unitSold: t.unit_sold || 0,
+      totalSales: Number(t.total_sales || 0),
+      operatingProfit: Number(t.operating_profit || 0),
+      operatingMargin: Number(t.operating_margin || 0)
     }))
 
     return NextResponse.json(formattedOrders)
   } catch (error) {
     console.error('Get orders error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await req.json()
-    const userRestaurantId = (session.user as any)?.restaurantId
-    const userId = (session.user as any)?.id || session.user?.email || 'unknown'
+    
+    const newTransaction = await prisma.transaction.create({
+      data: {
+        id_retailer: parseInt(body.retailerId),
+        id_product: parseInt(body.productId),
+        id_method: parseInt(body.methodId),
+        id_city: parseInt(body.cityId),
+        invoice_date: new Date(body.invoiceDate),
+        price_per_unit: parseFloat(body.pricePerUnit),
+        unit_sold: parseInt(body.unitSold),
+        total_sales: parseFloat(body.totalSales),
+        operating_profit: parseFloat(body.operatingProfit),
+        operating_margin: parseFloat(body.operatingMargin)
+      }
+    })
 
-    const retailerId = userRestaurantId ? parseInt(userRestaurantId) : body.retailerId
-
-    if (!retailerId) {
-      return NextResponse.json({ error: 'Retailer ID diperlukan' }, { status: 400 })
-    }
-
-    const { data, error } = await supabase
-      .from('transaction')
-      .insert([{
-        id_retailer: retailerId,
-        id_product: body.productId || 1,
-        id_method: body.methodId || 1,
-        id_city: body.cityId || 1,
-        invoice_date: body.invoiceDate || new Date().toISOString().split('T')[0],
-        price_per_unit: body.pricePerUnit || 0,
-        unit_sold: body.unitSold || 1,
-        total_sales: body.totalSales || 0,
-        operating_profit: body.operatingProfit || 0,
-        operating_margin: body.operatingMargin || 0
-      }])
-      .select()
-      .single()
-
-    if (error) throw error
-
-    return NextResponse.json(data)
-  } catch (error: any) {
+    return NextResponse.json({ success: true, data: newTransaction })
+  } catch (error) {
     console.error('Create order error:', error)
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Gagal menyimpan transaksi' }, { status: 500 })
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
-
-    if (!id) {
-      return NextResponse.json({ error: 'Order ID diperlukan' }, { status: 400 })
-    }
+    if (!id) return NextResponse.json({ error: 'ID tidak ditemukan' }, { status: 400 })
 
     const body = await req.json()
-    const userRestaurantId = (session.user as any)?.restaurantId
+    
+    // MENGGUNAKAN updateMany UNTUK MENGHINDARI ERROR COMPOSITE KEY
+    await prisma.transaction.updateMany({
+      where: { id_transaction: parseInt(id) },
+      data: {
+        id_retailer: parseInt(body.retailerId),
+        id_product: parseInt(body.productId),
+        id_method: parseInt(body.methodId),
+        id_city: parseInt(body.cityId),
+        invoice_date: new Date(body.invoiceDate),
+        price_per_unit: parseFloat(body.pricePerUnit),
+        unit_sold: parseInt(body.unitSold),
+        total_sales: parseFloat(body.totalSales),
+        operating_profit: parseFloat(body.operatingProfit),
+        operating_margin: parseFloat(body.operatingMargin)
+      }
+    })
 
-    const userRole = (session.user as any).role || (session.user as any).position
-    const isSuperAdmin = userRole === 'GM' || userRole === 'ADMIN_PUSAT'
-
-    const updateData: any = {}
-    if (body.pricePerUnit) updateData.price_per_unit = body.pricePerUnit
-    if (body.unitSold) updateData.unit_sold = body.unitSold
-    if (body.totalSales) updateData.total_sales = body.totalSales
-    if (body.operatingProfit) updateData.operating_profit = body.operatingProfit
-    if (body.operatingMargin) updateData.operating_margin = body.operatingMargin
-
-    const { data, error } = await supabase
-      .from('transaction')
-      .update(updateData)
-      .eq('id_transaction', parseInt(id))
-      .select()
-      .single()
-
-    if (error) throw error
-
-    return NextResponse.json(data)
-  } catch (error: any) {
+    return NextResponse.json({ success: true })
+  } catch (error) {
     console.error('Update order error:', error)
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Gagal mengupdate transaksi' }, { status: 500 })
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'ID tidak ditemukan' }, { status: 400 })
 
-    if (!id) {
-      return NextResponse.json({ error: 'Order ID diperlukan' }, { status: 400 })
-    }
+    // MENGGUNAKAN deleteMany UNTUK MENGHINDARI ERROR COMPOSITE KEY
+    await prisma.transaction.deleteMany({
+      where: { id_transaction: parseInt(id) }
+    })
 
-    const { error } = await supabase
-      .from('transaction')
-      .delete()
-      .eq('id_transaction', parseInt(id))
-
-    if (error) throw error
-
-    return NextResponse.json({ message: 'Order dihapus' })
-  } catch (error: any) {
+    return NextResponse.json({ success: true })
+  } catch (error) {
     console.error('Delete order error:', error)
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Gagal menghapus transaksi' }, { status: 500 })
   }
 }

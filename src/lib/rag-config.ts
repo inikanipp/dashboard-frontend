@@ -71,7 +71,7 @@ export const ADIDAS_RETAIL_CONFIG: DataContextConfig = {
   ],
 
   dataSource: {
-    type: 'supabase',
+    type: 'prisma', // <-- INI YANG DIRUBAH DARI 'supabase' MENJADI 'prisma'
     tables: {
       transactions: 'transaction',
       retailers: 'retailer',

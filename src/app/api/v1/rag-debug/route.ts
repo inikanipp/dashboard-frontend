@@ -1,43 +1,40 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { prisma } from '@/lib/prisma'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const { count: transactionCount } = await supabase
-      .from('transaction')
-      .select('*', { count: 'exact', head: true })
+    const transactionCount = await prisma.transaction.count()
+    const retailerCount = await prisma.retailer.count()
 
-    const { count: retailerCount } = await supabase
-      .from('retailer')
-      .select('*', { count: 'exact', head: true })
+    const transactions = await prisma.transaction.findMany({
+      take: 100,
+      select: { total_sales: true, operating_profit: true, operating_margin: true }
+    })
 
-    const { data: transactions } = await supabase
-      .from('transaction')
-      .select('total_sales, operating_profit, operating_margin')
-      .limit(100)
-
-    const avgSales = transactions?.length 
-      ? transactions.reduce((sum, t) => sum + (t.total_sales || 0), 0) / transactions.length 
+    const avgSales = transactions.length 
+      ? transactions.reduce((sum, t) => sum + Number(t.total_sales || 0), 0) / transactions.length 
       : 0
 
-    const { data: sampleTransactions } = await supabase
-      .from('transaction')
-      .select('*, retailer(retailer_name), product(product)')
-      .limit(5)
-      .order('invoice_date', { ascending: false })
+    const sampleTransactions = await prisma.transaction.findMany({
+      take: 5,
+      include: { retailer: true, product: true },
+      orderBy: { invoice_date: 'desc' }
+    })
 
     return NextResponse.json({ 
       message: 'RAG Database Debug',
-      database: 'Supabase PostgreSQL',
-      totalTransactions: transactionCount || 0,
-      totalRetailers: retailerCount || 0,
+      database: 'Prisma PostgreSQL',
+      totalTransactions: transactionCount,
+      totalRetailers: retailerCount,
       avgSales,
-      sampleTransactions: sampleTransactions?.map(t => ({
+      sampleTransactions: sampleTransactions.map(t => ({
         id: t.id_transaction,
-        retailer: (t as any).retailer?.retailer_name,
-        product: (t as any).product?.product,
-        totalSales: t.total_sales
-      })) || []
+        retailer: t.retailer?.retailer_name,
+        product: t.product?.product,
+        totalSales: Number(t.total_sales || 0)
+      }))
     })
   } catch (error: any) {
     return NextResponse.json({ 

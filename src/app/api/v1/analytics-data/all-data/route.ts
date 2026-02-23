@@ -1,36 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { prisma } from '@/lib/prisma'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    const { data: transactions, error } = await supabase
-      .from('transaction')
-      .select(`
-        *,
-        retailer(retailer_name),
-        product(product),
-        city(city),
-        method(method)
-      `)
-      .limit(10000)
+    // Hanya perlu mengambil data dari tabel transaksi
+    const transactions = await prisma.transaction.findMany({
+      take: 10000, // Limit 10,000 baris
+      include: {
+        retailer: true,
+        product: true,
+        city: true,
+        method: true
+      },
+      orderBy: {
+        invoice_date: 'desc'
+      }
+    })
 
-    if (error) {
-      console.log('Transaction table error (may not exist):', error.message)
-    }
-
-    const { data: retailers } = await supabase
-      .from('retailer')
-      .select('*')
-      
-    const { data: products } = await supabase
-      .from('product')
-      .select('*')
-
-    const { data: cities } = await supabase
-      .from('city')
-      .select('*')
-
-    const data = (transactions || []).map((t: any) => ({
+    // Mapping data agar struktur JSON sesuai dengan kebutuhan tabel frontend
+    const data = transactions.map((t) => ({
       id_transaction: t.id_transaction,
       id_retailer: t.id_retailer,
       retailer_name: t.retailer?.retailer_name || '',
@@ -38,22 +28,28 @@ export async function GET(req: NextRequest) {
       method: t.method?.method || '',
       city: t.city?.city || '',
       invoice_date: t.invoice_date,
-      price_per_unit: t.price_per_unit,
+      price_per_unit: Number(t.price_per_unit || 0),
       unit_sold: t.unit_sold,
-      total_sales: t.total_sales,
-      operating_profit: t.operating_profit,
-      operating_margin: t.operating_margin,
+      total_sales: Number(t.total_sales || 0),
+      operating_profit: Number(t.operating_profit || 0),
+      operating_margin: Number(t.operating_margin || 0),
       order_count: 1
     }))
+
+    // MENGHITUNG DATA UNIK HANYA DARI TRANSAKSI YANG ADA
+    // Set() secara otomatis akan membuang duplikat ID
+    const uniqueRetailers = new Set(transactions.map(t => t.id_retailer)).size
+    const uniqueProducts = new Set(transactions.map(t => t.id_product)).size
+    const uniqueCities = new Set(transactions.map(t => t.id_city)).size
 
     return NextResponse.json({
       success: true,
       data: data,
       stats: {
-        transactions: data.length,
-        retailers: (retailers || []).length,
-        products: (products || []).length,
-        cities: (cities || []).length
+        transactions: transactions.length,
+        retailers: uniqueRetailers, // Sekarang hanya menghitung retailer yang ada transaksinya
+        products: uniqueProducts,   // Hanya menghitung produk yang terjual
+        cities: uniqueCities        // Hanya menghitung kota yang ada transaksinya
       }
     })
   } catch (error: any) {
@@ -62,7 +58,8 @@ export async function GET(req: NextRequest) {
       success: true,
       data: [],
       stats: { transactions: 0, retailers: 0, products: 0, cities: 0 },
-      message: 'Database may not be ready yet'
+      message: 'Database connection failed or table does not exist'
     })
   }
 }
+
