@@ -103,14 +103,17 @@ export function EBarChart({ data, color = CHART_COLORS[0], isCurrency = false, h
         axisLabel: {
           color: '#64748b',
           fontSize: 10,
-          rotate: data.length > 6 ? 35 : 0,
+          interval: 0, // <-- TAMBAHKAN INI: Memaksa semua label muncul
+          rotate: 35,  // <-- UBAH INI: Buat selalu miring 35 derajat (jangan pakai kondisi data.length > 6)
           formatter: (value: string) => {
+            // Logika untuk format tanggal (biarkan saja)
             if (value.includes('-')) {
               const [year, month] = value.split('-')
               const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
               return `${months[parseInt(month) - 1]} ${year.slice(2)}`
             }
-            return value.length > 8 && data.length > 6 ? value.substring(0, 6) + '...' : value
+            // <-- UBAH INI: Biarkan teks lebih panjang (potong di 15 karakter saja, bukan 6 karakter)
+            return value.length > 15 ? value.substring(0, 15) + '...' : value
           }
         },
         axisLine: { lineStyle: { color: '#cbd5e1' } },
@@ -197,18 +200,20 @@ export function ELineChart({ data, color = CHART_COLORS[0], isCurrency = false, 
       xAxis: {
         type: 'category',
         data: data.map(d => d.label),
-        boundaryGap: false,
         axisLabel: {
           color: '#64748b',
           fontSize: 10,
-          rotate: data.length > 6 ? 35 : 0,
+          interval: 0, // <-- TAMBAHKAN INI: Memaksa semua label muncul
+          rotate: 35,  // <-- UBAH INI: Buat selalu miring 35 derajat (jangan pakai kondisi data.length > 6)
           formatter: (value: string) => {
+            // Logika untuk format tanggal (biarkan saja)
             if (value.includes('-')) {
               const [year, month] = value.split('-')
               const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
               return `${months[parseInt(month) - 1]} ${year.slice(2)}`
             }
-            return value.length > 8 && data.length > 6 ? value.substring(0, 6) + '...' : value
+            // <-- UBAH INI: Biarkan teks lebih panjang (potong di 15 karakter saja, bukan 6 karakter)
+            return value.length > 15 ? value.substring(0, 15) + '...' : value
           }
         },
         axisLine: { lineStyle: { color: '#cbd5e1' } },

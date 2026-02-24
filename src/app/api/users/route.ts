@@ -1,53 +1,39 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { NextResponse } from 'next/server'
+import { PrismaClient } from '@prisma/client'
 
-export const dynamic = 'force-dynamic'
+const prisma = new PrismaClient()
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const userRole = (session.user as any)?.role || (session.user as any)?.position || 'STAFF'
-    const isGM = userRole === 'GM' || userRole === 'GENERAL_MANAGER'
-
-    // Pastikan hanya GM yang bisa melihat data ini
-    if (!isGM) {
-      return NextResponse.json({ error: 'Forbidden - Akses hanya untuk GM' }, { status: 403 })
-    }
-
-    // Mengambil data user selain role GM menggunakan Prisma
-    // Bagian relasi 'retailer' dihilangkan agar tidak memicu error 'never'
+    // 1. Mengambil semua user dan MENG-INCLUDE relasi tabel retailer
     const users = await prisma.user.findMany({
-      where: {
-        role: {
-          notIn: ['GM', 'GENERAL_MANAGER']
-        }
+      include: {
+        retailer: true // <- INI KUNCINYA: Memerintahkan Prisma untuk mengambil data department
       },
       orderBy: {
-        createdAt: 'desc'
+        createdAt: 'desc' // Urutkan dari yang terbaru
       }
     })
 
-    // Memformat data agar mudah dibaca oleh frontend
-    const formattedUsers = users.map((user: any) => ({
+    // 2. Memformat data agar rapi saat diterima oleh Frontend
+    const formattedUsers = users.map((user) => ({
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       position: user.position,
       isActive: user.isActive,
-      retailerName: 'Pusat / Belum Set' // Fallback karena relasi database belum ada
+      // 3. Mengambil 'retailer_name' dari relasi. Jika kosong (misal Admin), tulis 'Pusat'
+      retailerName: user.retailer?.retailer_name || 'Admin' 
     }))
 
-    return NextResponse.json({ success: true, data: formattedUsers })
-  } catch (error: any) {
-    console.error('Fetch users error:', error)
-    return NextResponse.json({ error: 'Gagal mengambil data user' }, { status: 500 })
+    return NextResponse.json({ data: formattedUsers }, { status: 200 })
+    
+  } catch (error) {
+    console.error('Error fetching users:', error)
+    return NextResponse.json(
+      { error: 'Gagal memuat data user dari database' }, 
+      { status: 500 }
+    )
   }
 }

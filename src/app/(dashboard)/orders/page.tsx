@@ -265,7 +265,7 @@ export default function OrdersPage() {
             Data Transaksi
           </h1>
           <p style={{ color: 'var(--muted-foreground)' }}>
-            Kelola data transaksi Adidas
+            Kelola data transaksi Artavista
           </p>
         </div>
         <Button
@@ -487,11 +487,14 @@ export default function OrdersPage() {
                     <Input
                       type="number"
                       value={formData.pricePerUnit}
-                      onChange={(e) => setFormData({
-                        ...formData, 
-                        pricePerUnit: parseFloat(e.target.value) || 0,
-                        totalSales: parseFloat(e.target.value) * formData.unitSold
-                      })}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseFloat(e.target.value) || 0);
+                        setFormData({
+                          ...formData, 
+                          pricePerUnit: val,
+                          totalSales: val * formData.unitSold
+                        });
+                      }}
                       className="h-11 bg-white border-slate-200 focus:border-green-400 focus:ring-green-100"
                     />
                   </div>
@@ -500,11 +503,19 @@ export default function OrdersPage() {
                     <Input
                       type="number"
                       value={formData.unitSold}
-                      onChange={(e) => setFormData({
-                        ...formData, 
-                        unitSold: parseInt(e.target.value) || 1,
-                        totalSales: formData.pricePerUnit * (parseInt(e.target.value) || 1)
-                      })}
+                      onChange={(e) => {
+                        // Ambil nilai dari input, jika kosong atau bukan angka default ke 1
+                        const rawValue = parseInt(e.target.value);
+                        
+                        // Math.max(1, ...) memastikan angka yang masuk tidak akan pernah lebih kecil dari 1
+                        const safeUnitSold = Math.max(1, rawValue || 1);
+
+                        setFormData({
+                          ...formData, 
+                          unitSold: safeUnitSold,
+                          totalSales: formData.pricePerUnit * safeUnitSold
+                        });
+                      }}
                       className="h-11 bg-white border-slate-200 focus:border-green-400 focus:ring-green-100"
                     />
                   </div>
@@ -513,8 +524,15 @@ export default function OrdersPage() {
                     <Input
                       type="number"
                       value={formData.totalSales}
-                      onChange={(e) => setFormData({...formData, totalSales: parseFloat(e.target.value) || 0})}
-                      className="h-11 bg-white border-slate-200 focus:border-green-400 focus:ring-green-100"
+                      onChange={(e) => {
+                        const val = Math.max(0, parseFloat(e.target.value) || 0);
+                        setFormData({
+                          ...formData, 
+                          totalSales: val,
+                          // Opsional: Update margin jika total sales berubah
+                          operatingMargin: val > 0 ? (formData.operatingProfit / val) * 100 : 0
+                        });
+                      }}                      className="h-11 bg-white border-slate-200 focus:border-green-400 focus:ring-green-100"
                     />
                   </div>
                   <div className="space-y-2">
@@ -522,11 +540,14 @@ export default function OrdersPage() {
                     <Input
                       type="number"
                       value={formData.operatingProfit}
-                      onChange={(e) => setFormData({
-                        ...formData, 
-                        operatingProfit: parseFloat(e.target.value) || 0,
-                        operatingMargin: formData.totalSales > 0 ? (parseFloat(e.target.value) / formData.totalSales) * 100 : 0
-                      })}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseFloat(e.target.value) || 0);
+                        setFormData({
+                          ...formData, 
+                          operatingProfit: val,
+                          operatingMargin: formData.totalSales > 0 ? (val / formData.totalSales) * 100 : 0
+                        });
+                      }}
                       className="h-11 bg-white border-slate-200 focus:border-green-400 focus:ring-green-100"
                     />
                   </div>
@@ -536,7 +557,7 @@ export default function OrdersPage() {
           </div>
           
           {/* Footer */}
-          <div className="flex-shrink-0 flex justify-end gap-3 pt-4 border-t border-slate-200 bg-slate-50 px-6 py-4 -mx-6 -mb-4 rounded-b-2xl">
+          {/* <div className="flex-shrink-0 flex justify-end gap-3 pt-4 border-t border-slate-200 bg-slate-50 px-6 py-4 -mx-6 -mb-4 rounded-b-2xl">
             <Button 
               variant="outline" 
               onClick={() => setIsDialogOpen(false)}
@@ -548,6 +569,24 @@ export default function OrdersPage() {
               onClick={handleSubmit}
               disabled={isSubmitting}
               className="px-8 h-11 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold shadow-lg shadow-blue-500/25"
+            >
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSubmitting ? 'Menyimpan...' : 'Simpan Transaksi'}
+            </Button>
+          </div> */}
+          {/* Footer - Ditingkatkan padding-nya agar tidak mepet */}
+          <div className="flex-shrink-0 flex justify-end gap-4 border-t border-slate-200 bg-slate-50 px-10 py-8 -mx-6 -mb-6 rounded-b-2xl">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDialogOpen(false)}
+              className="px-6 h-11 border-slate-300 text-slate-600 hover:bg-slate-100 bg-white"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="px-10 h-11 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold shadow-lg shadow-blue-500/25"
             >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isSubmitting ? 'Menyimpan...' : 'Simpan Transaksi'}
