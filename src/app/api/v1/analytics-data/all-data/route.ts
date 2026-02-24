@@ -64,7 +64,6 @@
 // }
 
 
-
 import { NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
 
@@ -75,40 +74,49 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const retailerId = searchParams.get('retailerId')
 
-    // Jika ada retailerId (STAFF login), filter datanya. Jika tidak (GM login), ambil semua.
     const whereClause = retailerId ? { id_retailer: parseInt(retailerId) } : {}
 
-    // 1. Hitung Total Transaksi
-    const totalTransactions = await prisma.transaction.count({
-      where: whereClause,
-    })
-
-    // 2. Hitung Total Retailer/Department
+    // 1. Hitung Statistik (Untuk halaman Upload)
+    const totalTransactions = await prisma.transaction.count({ where: whereClause })
+    
     let totalRetailers = 0
     if (retailerId) {
-      // Jika Staff, departemennya pasti hanya 1 (miliknya sendiri)
       totalRetailers = 1 
     } else {
-      // Jika GM, hitung berapa banyak departemen unik yang ada transaksinya
-      const uniqueRetailers = await prisma.transaction.groupBy({
-        by: ['id_retailer'],
-      })
+      const uniqueRetailers = await prisma.transaction.groupBy({ by: ['id_retailer'] })
       totalRetailers = uniqueRetailers.length
     }
 
-    // 3. Hitung Total Produk Unik
-    const uniqueProducts = await prisma.transaction.groupBy({
-      by: ['id_product'],
-      where: whereClause,
-    })
+    const uniqueProducts = await prisma.transaction.groupBy({ by: ['id_product'], where: whereClause })
     const totalProducts = uniqueProducts.length
 
-    // 4. Hitung Total Kota Unik
-    const uniqueCities = await prisma.transaction.groupBy({
-      by: ['id_city'],
-      where: whereClause,
-    })
+    const uniqueCities = await prisma.transaction.groupBy({ by: ['id_city'], where: whereClause })
     const totalCities = uniqueCities.length
+
+    // 2. Ambil Raw Data (Sangat DIBUTUHKAN untuk halaman Forecasting)
+    const rawTransactions = await prisma.transaction.findMany({
+      where: whereClause,
+      include: {
+        retailer: true,
+        product: true,
+        city: true,
+        method: true
+      },
+      orderBy: { invoice_date: 'asc' }
+    });
+
+    const formattedData = rawTransactions.map((t: any) => ({
+      retailer_name: t.retailer?.retailer_name,
+      product: t.product?.product,
+      method: t.method?.method,
+      city: t.city?.city,
+      invoice_date: t.invoice_date ? new Date(t.invoice_date).toISOString().split('T')[0] : null,
+      price_per_unit: Number(t.price_per_unit || 0),
+      unit_sold: Number(t.unit_sold || 0),
+      total_sales: Number(t.total_sales || 0),
+      operating_profit: Number(t.operating_profit || 0),
+      operating_margin: Number(t.operating_margin || 0)
+    }));
 
     return NextResponse.json({
       success: true,
@@ -117,12 +125,13 @@ export async function GET(request: Request) {
         retailers: totalRetailers,
         products: totalProducts,
         cities: totalCities,
-      }
+      },
+      data: formattedData // <--- INI KUNCI AGAR FORECASTING BISA BERJALAN LAGI
     })
   } catch (error) {
-    console.error("Error fetching db stats:", error)
+    console.error("Error fetching db data:", error)
     return NextResponse.json(
-      { success: false, error: "Gagal mengambil statistik database" }, 
+      { success: false, error: "Gagal mengambil data" }, 
       { status: 500 }
     )
   }

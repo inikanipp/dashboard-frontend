@@ -479,8 +479,8 @@
 //         </Card>
 //       </div>
 
-//       {/* Row 1: Line Chart & Bar Chart (2 columns) */}
-//       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+//       {/* Row 1: Line Chart (Full Width) */}
+//       <div className="grid grid-cols-1 gap-6">
 //         <ChartCard 
 //           title="Tren Penjualan per Bulan"
 //           description="Visualisasi total penjualan berdasarkan waktu"
@@ -495,21 +495,6 @@
 //             />
 //           ) : <EmptyChart message="Belum ada data bulanan" />}
 //         </ChartCard>
-
-//         {data.ordersByRestaurant && data.ordersByRestaurant.length > 0 && (
-//           <ChartCard 
-//             title="Performa Department"
-//             description="Perbandingan nilai penjualan antar department"
-//             insight={`Retailer tertinggi: ${data.ordersByRestaurant.sort((a,b) => (b.sales||0) - (a.sales||0))[0]?.restaurant || '-'}`}
-//           >
-//             <EBarChart 
-//               data={data.ordersByRestaurant.map(d => ({ label: d.restaurant, value: d.sales || 0 })).sort((a,b) => b.value - a.value)} 
-//               color="#3b82f6"
-//               isCurrency={true}
-//               height={320}
-//             />
-//           </ChartCard>
-//         )}
 //       </div>
 
 //       {/* Row 2: 2 Pie Charts (2 columns) */}
@@ -540,8 +525,8 @@
 //         </ChartCard>
 //       </div>
 
-//       {/* Row 3: Bar Chart Top 5 Kota (Full Width) */}
-//       <div className="grid grid-cols-1 gap-6">
+//       {/* Row 3: Bar Chart Top 5 Kota & Performa Department (2 Columns) */}
+//       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 //         <ChartCard 
 //           title="Top 5 Kota (Revenue)"
 //           description="Kota dengan nilai penjualan tertinggi"
@@ -553,32 +538,32 @@
 //                 label: d.location?.length > 15 ? d.location.substring(0, 15) + '...' : d.location, 
 //                 value: d.sales || 0
 //               }))} 
-//               color="#22c55e"
+//               color="#6366f1" // Warna Indigo
 //               isCurrency={true}
 //               height={320}
 //             />
 //           ) : <EmptyChart message="Belum ada data lokasi" />}
 //         </ChartCard>
-//       </div>
 
-//       {/* Row 4: Bar Chart 10 Kota & Pie Chart Metode (2 Columns) */}
-//       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-//         {data.ordersByLocation && data.ordersByLocation.length > 0 && (
+//         {data.ordersByRestaurant && data.ordersByRestaurant.length > 0 && (
 //           <ChartCard 
-//             title="Volume Transaksi per Kota"
-//             description="Jumlah unit yang terjual berdasarkan lokasi (Top 10)"
+//             title="Performa Department"
+//             description="Perbandingan nilai penjualan antar department"
+//             insight={`Retailer tertinggi: ${data.ordersByRestaurant.sort((a,b) => (b.sales||0) - (a.sales||0))[0]?.restaurant || '-'}`}
 //           >
 //             <EBarChart 
-//               data={data.ordersByLocation.slice(0, 10).map(d => ({ 
-//                 label: d.location?.length > 15 ? d.location.substring(0, 15) + '...' : d.location, 
-//                 value: d.count 
-//               })).sort((a,b) => b.value - a.value)} 
-//               color="#22c55e"
+//               data={data.ordersByRestaurant.map(d => ({ label: d.restaurant, value: d.sales || 0 })).sort((a,b) => b.value - a.value)} 
+//               color="#3b82f6" // Warna Standard Blue
+//               isCurrency={true}
 //               height={320}
 //             />
 //           </ChartCard>
 //         )}
+//       </div>
 
+//       {/* Row 4: Pie Chart Metode Penjualan & Bar Chart 10 Kota (Selang-Seling Kiri-Kanan) */}
+//       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+//         {/* Pie Chart di Kiri */}
 //         {data.ordersByMethod && data.ordersByMethod.length > 0 && (
 //           <ChartCard 
 //             title="Metode Penjualan"
@@ -592,18 +577,34 @@
 //             />
 //           </ChartCard>
 //         )}
+
+//         {/* Bar Chart di Kanan */}
+//         {data.ordersByLocation && data.ordersByLocation.length > 0 && (
+//           <ChartCard 
+//             title="Volume Transaksi per Kota"
+//             description="Jumlah unit yang terjual berdasarkan lokasi (Top 10)"
+//           >
+//             <EBarChart 
+//               data={data.ordersByLocation.slice(0, 10).map(d => ({ 
+//                 label: d.location?.length > 15 ? d.location.substring(0, 15) + '...' : d.location, 
+//                 value: d.count 
+//               })).sort((a,b) => b.value - a.value)} 
+//               color="#0ea5e9" // Warna Sky Blue (Biru Muda Cerah)
+//               height={320}
+//             />
+//           </ChartCard>
+//         )}
 //       </div>
 //     </div>
 //   )
 // }
 
 
-
 'use client'
 
 export const dynamic = 'force-dynamic'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -611,7 +612,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, TrendingUp, Clock, AlertTriangle, CheckCircle2, Upload, Filter, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
 import Link from 'next/link'
-import { EBarChart, ELineChart, EPieChart } from '@/components/charts/echart-components'
+import * as echarts from 'echarts'
+import { EBarChart, EPieChart } from '@/components/charts/echart-components'
 
 interface Restaurant {
   id: string
@@ -656,6 +658,131 @@ function formatCurrency(num: number): string {
   else if (num >= 1000) return 'Rp ' + (num / 1000).toFixed(0) + ' RB'
   return 'Rp ' + num.toLocaleString('id-ID')
 }
+
+// KOMPONEN LINE CHART BARU KHUSUS ANALYTICS (Diadaptasi dari Forecasting)
+function AnalyticsLineChart({ data, color = '#f97316', isCurrency = true, height = 320 }: { data: {label: string, value: number}[], color?: string, isCurrency?: boolean, height?: number }) {
+  const chartRef = useRef<HTMLDivElement>(null)
+  const chartInstance = useRef<echarts.ECharts | null>(null)
+
+  const formatMonthLabel = (dateStr: string) => {
+    try {
+      if (dateStr.includes('-')) {
+        const [year, month] = dateStr.split('-');
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${months[parseInt(month) - 1]} ${year.length === 4 ? year.substring(2) : year}`;
+      }
+      return dateStr;
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
+  useEffect(() => {
+    if (!chartRef.current) return
+    chartInstance.current = echarts.init(chartRef.current)
+    return () => chartInstance.current?.dispose()
+  }, [])
+
+  useEffect(() => {
+    if (!chartInstance.current || !data.length) return
+
+    const option: echarts.EChartsOption = {
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: '#e2e8f0',
+        borderWidth: 1,
+        padding: [8, 12],
+        textStyle: { color: '#334155' },
+        formatter: (params: any) => {
+          const val = params[0];
+          const cleanDate = formatMonthLabel(val.name);
+          return `
+            <div style="font-weight:700; margin-bottom:6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+              ${cleanDate}
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:${val.color};"></span>
+              <span style="color:#64748b">Revenue:</span>
+              <span style="font-weight:700">${isCurrency ? formatCurrency(val.value) : formatNumber(val.value)}</span>
+            </div>
+          `;
+        }
+      },
+      dataZoom: [
+        { 
+          type: 'inside', 
+          start: data.length > 12 ? 60 : 0, // Zoom otomatis ke bulan terbaru jika datanya banyak
+          end: 100 
+        },
+        { 
+          start: 0, 
+          end: 100, 
+          bottom: 10, 
+          height: 12, 
+          handleSize: '80%', 
+          borderColor: 'transparent', 
+          backgroundColor: '#f1f5f9', 
+          fillerColor: 'rgba(249, 115, 22, 0.2)' 
+        }
+      ],
+      // Bottom diperbesar (75) agar label x-axis yang miring dan slider dataZoom tidak tabrakan
+      grid: { left: 55, right: 20, top: 20, bottom: 75 }, 
+      xAxis: {
+        type: 'category',
+        data: data.map(d => d.label),
+        boundaryGap: false,
+        axisLabel: { 
+            color: '#64748b', 
+            fontSize: 10, 
+            rotate: 45, 
+            hideOverlap: true, // INI KUNCI AGAR TIDAK TUMPUK DI HP
+            formatter: (value: string) => formatMonthLabel(value)
+        },
+        axisLine: { lineStyle: { color: '#cbd5e1' } }
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: { color: '#64748b', fontSize: 10, formatter: (v: number) => isCurrency ? formatCurrency(v) : formatNumber(v) },
+        splitLine: { lineStyle: { color: '#e2e8f0', type: 'dashed' } }
+      },
+      series: [
+        {
+          type: 'line',
+          data: data.map(d => d.value),
+          smooth: true,
+          symbol: 'circle',
+          symbolSize: 6,
+          itemStyle: { color },
+          lineStyle: { width: 3 },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: color + '40' },
+              { offset: 1, color: color + '05' }
+            ])
+          },
+          label: {
+            show: true,
+            position: 'top',
+            formatter: (params: any) => isCurrency ? formatCurrency(params.value) : formatNumber(params.value),
+            color: '#475569',
+            fontSize: 10,
+            fontWeight: 'bold'
+          }
+        }
+      ],
+      animationDuration: 1000
+    }
+
+    chartInstance.current.setOption(option, true)
+    const handleResize = () => chartInstance.current?.resize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [data, color, isCurrency])
+
+  return <div ref={chartRef} style={{ width: '100%', height: `${height}px` }} />
+}
+// BATAS KOMPONEN BARU
 
 function DataSlicer({ 
   filters, 
@@ -1002,7 +1129,7 @@ export default function AnalyticsPage() {
   const data = filteredData
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Analytics & Insights</h1>
@@ -1011,7 +1138,7 @@ export default function AnalyticsPage() {
         <div className="flex items-center gap-3">
           {isSuperAdmin && restaurants.length > 0 && (
             <Select value={selectedRestaurant} onValueChange={setSelectedRestaurant}>
-              <SelectTrigger className="w-64"><SelectValue placeholder="Pilih retailer" /></SelectTrigger>
+              <SelectTrigger className="w-full md:w-64"><SelectValue placeholder="Pilih retailer" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Retail</SelectItem>
                 {restaurants?.map(r => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>)}
@@ -1030,52 +1157,52 @@ export default function AnalyticsPage() {
       />
 
       {/* Summary Stats - KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 font-semibold text-blue-700">
+          <CardHeader className="pb-2 px-4 md:px-6 pt-4">
+            <CardDescription className="flex items-center gap-2 font-semibold text-blue-700 text-xs md:text-sm">
               <TrendingUp className="w-4 h-4" /> Total Unit Terjual
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-blue-800">{formatNumber(data.totalOrders)}</p>
-            <p className="text-xs text-blue-600/70 mt-1">Total Unit</p>
+          <CardContent className="px-4 md:px-6 pb-4">
+            <p className="text-xl md:text-3xl font-bold text-blue-800">{formatNumber(data.totalOrders)}</p>
+            <p className="text-[10px] md:text-xs text-blue-600/70 mt-1">Total Unit</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 font-semibold text-emerald-700">
+          <CardHeader className="pb-2 px-4 md:px-6 pt-4">
+            <CardDescription className="flex items-center gap-2 font-semibold text-emerald-700 text-xs md:text-sm">
               <CheckCircle2 className="w-4 h-4" /> Total Revenue
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-emerald-800">{formatCurrency(data.salesStats?.total || 0)}</p>
-            <p className="text-xs text-emerald-600/70 mt-1">Total Penjualan</p>
+          <CardContent className="px-4 md:px-6 pb-4">
+            <p className="text-xl md:text-3xl font-bold text-emerald-800">{formatCurrency(data.salesStats?.total || 0)}</p>
+            <p className="text-[10px] md:text-xs text-emerald-600/70 mt-1">Total Penjualan</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-rose-50 to-rose-100 border-rose-200">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 font-semibold text-rose-700">
+          <CardHeader className="pb-2 px-4 md:px-6 pt-4">
+            <CardDescription className="flex items-center gap-2 font-semibold text-rose-700 text-xs md:text-sm">
               <AlertTriangle className="w-4 h-4" /> Total Profit
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-rose-800">{formatCurrency(data.salesStats?.profit || 0)}</p>
-            <p className="text-xs text-rose-600/70 mt-1">Estimasi Keuntungan</p>
+          <CardContent className="px-4 md:px-6 pb-4">
+            <p className="text-xl md:text-3xl font-bold text-rose-800">{formatCurrency(data.salesStats?.profit || 0)}</p>
+            <p className="text-[10px] md:text-xs text-rose-600/70 mt-1">Estimasi Keuntungan</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-violet-50 to-violet-100 border-violet-200">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 font-semibold text-violet-700">
+          <CardHeader className="pb-2 px-4 md:px-6 pt-4">
+            <CardDescription className="flex items-center gap-2 font-semibold text-violet-700 text-xs md:text-sm">
               <Clock className="w-4 h-4" /> Rata-rata Order
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-violet-800">{formatCurrency(data.salesStats?.avgOrderValue || 0)}</p>
-            <p className="text-xs text-violet-600/70 mt-1">Per Unit Terjual</p>
+          <CardContent className="px-4 md:px-6 pb-4">
+            <p className="text-xl md:text-3xl font-bold text-violet-800">{formatCurrency(data.salesStats?.avgOrderValue || 0)}</p>
+            <p className="text-[10px] md:text-xs text-violet-600/70 mt-1">Per Unit Terjual</p>
           </CardContent>
         </Card>
       </div>
@@ -1088,7 +1215,7 @@ export default function AnalyticsPage() {
           insight={data.ordersByMonth && data.ordersByMonth.length > 0 ? `Total revenue: ${formatCurrency(data.salesStats?.total)}` : undefined}
         >
           {data.ordersByMonth && data.ordersByMonth.length > 0 ? (
-            <ELineChart 
+            <AnalyticsLineChart 
               data={data.ordersByMonth.map(d => ({ label: d.month.slice(0, 7), value: d.sales || 0 }))} 
               color="#f97316"
               isCurrency={true}
