@@ -96,23 +96,47 @@ export function EBarChart({ data, color = CHART_COLORS[0], isCurrency = false, h
           return name.length > 10 ? name.substring(0, 10) + '...' : name
         }
       },
-      grid: { left: 50, right: 20, top: 20, bottom: 60 },
+      // ==========================================
+      // FITUR SCROLL/GESER: SELALU AKTIF
+      // ==========================================
+      dataZoom: [
+        {
+          type: 'inside', // Swipe dengan jari
+          startValue: 0,  
+          endValue: 3,    // Selalu tampilkan 4 batang maksimal di awal (index 0,1,2,3) agar tidak pernah tumpuk
+          zoomLock: true  
+        },
+        {
+          type: 'slider', // Scrollbar di bawah
+          show: true,     // Selalu tampilkan scrollbar
+          startValue: 0,
+          endValue: 3,
+          bottom: 5,
+          height: 8,
+          borderColor: 'transparent',
+          backgroundColor: '#f1f5f9',
+          fillerColor: color + '40',
+          handleSize: '0%',
+          showDetail: false
+        }
+      ],
+      // Jarak bawah selalu diperbesar menjadi 85 karena scrollbar selalu aktif
+      grid: { left: 55, right: 20, top: 35, bottom: 85 },
       xAxis: {
         type: 'category',
         data: data.map(d => d.label),
         axisLabel: {
           color: '#64748b',
           fontSize: 10,
-          interval: 0, // <-- TAMBAHKAN INI: Memaksa semua label muncul
-          rotate: 35,  // <-- UBAH INI: Buat selalu miring 35 derajat (jangan pakai kondisi data.length > 6)
+          interval: 0,
+          rotate: 35,
+          hideOverlap: false,
           formatter: (value: string) => {
-            // Logika untuk format tanggal (biarkan saja)
             if (value.includes('-')) {
               const [year, month] = value.split('-')
               const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
               return `${months[parseInt(month) - 1]} ${year.slice(2)}`
             }
-            // <-- UBAH INI: Biarkan teks lebih panjang (potong di 15 karakter saja, bukan 6 karakter)
             return value.length > 15 ? value.substring(0, 15) + '...' : value
           }
         },
@@ -132,14 +156,14 @@ export function EBarChart({ data, color = CHART_COLORS[0], isCurrency = false, h
         type: 'bar',
         data: data.map(d => d.value),
         itemStyle: { color, borderRadius: [6, 6, 0, 0] },
-        barMaxWidth: 40,
+        barMaxWidth: 45,
         label: showLabels ? {
           show: true,
           position: 'top',
           formatter: (params: any) => formatNumber(params.value, isCurrency),
           color: '#475569',
           fontSize: 10,
-          fontWeight: 600
+          fontWeight: 'bold'
         } : { show: false }
       }],
       animationDuration: 800,
@@ -196,23 +220,43 @@ export function ELineChart({ data, color = CHART_COLORS[0], isCurrency = false, 
         itemGap: 12,
         textStyle: { color: '#64748b', fontSize: 10 }
       },
-      grid: { left: 50, right: 20, top: 20, bottom: 60 },
+      // DataZoom untuk Line Chart (juga dibuat selalu aktif)
+      dataZoom: [
+        {
+          type: 'inside',
+          startValue: Math.max(0, data.length - 6),
+          endValue: data.length - 1,
+          zoomLock: true
+        },
+        {
+          type: 'slider',
+          show: true,
+          startValue: Math.max(0, data.length - 6),
+          endValue: data.length - 1,
+          bottom: 5,
+          height: 8,
+          borderColor: 'transparent',
+          backgroundColor: '#f1f5f9',
+          fillerColor: color + '40',
+          handleSize: '0%',
+          showDetail: false
+        }
+      ],
+      grid: { left: 50, right: 20, top: 20, bottom: 85 },
       xAxis: {
         type: 'category',
         data: data.map(d => d.label),
         axisLabel: {
           color: '#64748b',
           fontSize: 10,
-          interval: 0, // <-- TAMBAHKAN INI: Memaksa semua label muncul
-          rotate: 35,  // <-- UBAH INI: Buat selalu miring 35 derajat (jangan pakai kondisi data.length > 6)
+          interval: 0, 
+          rotate: 35,  
           formatter: (value: string) => {
-            // Logika untuk format tanggal (biarkan saja)
             if (value.includes('-')) {
               const [year, month] = value.split('-')
               const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
               return `${months[parseInt(month) - 1]} ${year.slice(2)}`
             }
-            // <-- UBAH INI: Biarkan teks lebih panjang (potong di 15 karakter saja, bukan 6 karakter)
             return value.length > 15 ? value.substring(0, 15) + '...' : value
           }
         },

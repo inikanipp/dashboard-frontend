@@ -265,13 +265,25 @@ export default function UploadPage() {
           const cleaned = data.preview || []
           setAllData(cleaned)
           setCleanedData(cleaned)
-          extractFilterOptions(cleaned)
+          
+          if (data.filter_options) {
+            setFilterOptions({
+              products: data.filter_options.products || [],
+              states: data.filter_options.states || [],
+              cities: data.filter_options.cities || [],
+              methods: data.filter_options.methods || []
+            });
+          } else {
+            // Fallback jika backend versi lama
+            extractFilterOptions(cleaned);
+          }
           
           setResult({
             success: true,
-            message: `✓ File dikenali! Preview siap untuk ${cleaned.length} baris data.`
+            message: `✓ File dikenali! total ${data.total_rows} baris data, ${data.columns.length} kolom.`
           })
         }
+
       } catch (error: any) {
         console.error('Preview error:', error)
         

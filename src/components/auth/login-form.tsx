@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { useState, useEffect } from 'react'
+import { signIn, getSession } from 'next-auth/react' // getSession ditambahkan di sini
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,6 +42,13 @@ export function LoginForm() {
   const [resetSuccess, setResetSuccess] = useState('')
   const [isResetting, setIsResetting] = useState(false)
 
+  // Membersihkan tulisan ?callbackUrl=... dari address bar browser secara instan
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('callbackUrl')) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -49,7 +56,7 @@ export function LoginForm() {
     setIsLoading(true)
 
     // ==========================================
-    // LOGIKA LOGIN
+    // LOGIKA LOGIN (CEPAT / TANPA DELAY)
     // ==========================================
     if (isLogin) {
       try {
@@ -59,16 +66,15 @@ export function LoginForm() {
           setError("Email dan password salah.")
           setIsLoading(false)
         } else {
-          setSuccess("Login berhasil! Mengalihkan ke dashboard...")
-          setTimeout(async () => {
-            const sessionRes = await fetch('/api/auth/session')
-            const session = await sessionRes.json()
-            const userRole = session?.user?.role || session?.user?.position
-            const managerRoles = ['MANAGER', 'GM', 'ADMIN_PUSAT']
-            
-            router.push(managerRoles.includes(userRole) ? '/' : '/upload')
-            router.refresh()
-          }, 1500) 
+          setSuccess("Login berhasil! Mengalihkan...")
+          
+          // Proses validasi Role instan tanpa setTimeout
+          const sessionObj = await getSession()
+          const userRole = sessionObj?.user?.role || (sessionObj?.user as any)?.position
+          const managerRoles = ['MANAGER', 'GM', 'ADMIN_PUSAT']
+          
+          router.push(managerRoles.includes(userRole) ? '/' : '/upload')
+          router.refresh()
         }
       } catch (err) {
         setError('Terjadi kesalahan koneksi')
@@ -76,7 +82,7 @@ export function LoginForm() {
       }
     } 
     // ==========================================
-    // LOGIKA REGISTER
+    // LOGIKA REGISTER (CEPAT / TANPA DELAY)
     // ==========================================
     else {
       if (!selectedRetailer) {
@@ -95,22 +101,23 @@ export function LoginForm() {
         
         if (!res.ok) {
           setError(data.error || 'Registrasi gagal')
+          setIsLoading(false)
         } else {
           setSuccess('Registrasi berhasil! Mengalihkan...')
           const loginResult = await signIn('credentials', { email, password, redirect: false })
+          
           if (loginResult?.error) {
             setError("Registrasi berhasil! Silakan login secara manual.")
             setIsLogin(true)
+            setIsLoading(false)
           } else {
-            setTimeout(() => {
-              router.push('/upload')
-              router.refresh()
-            }, 1500) 
+            // Langsung diarahkan tanpa setTimeout
+            router.push('/upload')
+            router.refresh()
           }
         }
       } catch (err) {
         setError('Terjadi kesalahan koneksi.')
-      } finally {
         setIsLoading(false)
       }
     }
@@ -142,7 +149,7 @@ export function LoginForm() {
           setResetPassword('')
           setResetSuccess('')
           setEmail(resetEmail) 
-        }, 2000)
+        }, 1500) // Untuk pop-up reset, kita tetap butuh jeda agar user tahu proses berhasil sebelum popup tertutup otomatis
       }
     } catch (err) {
       setResetError('Terjadi kesalahan koneksi.')
@@ -152,10 +159,9 @@ export function LoginForm() {
   }
 
   return (
-    // PERBAIKAN: Menggunakan min-h-screen dan flex-center yang bersih
     <div className="min-h-screen w-full bg-[#F4F7FF] font-sans text-slate-900 flex items-center justify-center p-4">
         
-      {/* Container utama form (Tinggi tetap 680px untuk desktop) */}
+      {/* Container utama form */}
       <div className="flex flex-col md:flex-row w-full max-w-[900px] bg-white rounded-[24px] shadow-[0_15px_40px_-15px_rgba(0,0,0,0.1)] p-2 md:h-[680px] relative z-10">
         
         {/* PANEL KIRI (Gradient Visual) */}
